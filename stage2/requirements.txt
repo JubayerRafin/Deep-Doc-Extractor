@@ -1,0 +1,5 @@
+# Deep Doc Extractor — Stage 2 Dependencies
+pyyaml>=6.0
+requests>=2.28
+sentence-transformers>=2.2.0
+numpy>=1.24
