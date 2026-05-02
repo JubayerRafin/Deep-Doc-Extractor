@@ -141,7 +141,7 @@ MIT — see [LICENSE](LICENSE). Per FR031.
 
 | Name | Role |
 |---|---|
-| MD Jubayer Hossain | Architecture, Layer 1, Quality Audit |
+| MD Jubayer Hossain | All stages, Architecture, Layer 1, Quality Audit |
 | Arlen Kasymbaev | Layer 1 Extraction |
 | Sangwook Yoo | Layer 2 Q&A Generation |
 | Inyoung Park | Layer 2 Quality Filtering |
