@@ -1,14 +1,48 @@
 # ============================================================
 # Deep Doc Extractor — Pipeline Configuration
 # Team DocuForge | Woosong University Capstone 2026
+#
+# MULTI-MODEL EXPERIMENT WORKFLOW
+# --------------------------------
+# To compare different LLMs, change only THREE things per run:
+#   1.  experiment.tag              (e.g. "qwen36_27b" or "mistral_24b")
+#   2.  stage2.llm.model            (the Ollama model name)
+#   3.  stage3.llm.model            (same model name)
+#
+# Output folders auto-key off experiment.tag, so different runs never
+# overwrite each other. Run-by-run setup:
+#
+#   Run 1 — Qwen 3.5 9B baseline (laptop):
+#       tag: "qwen35_9b"     model: "qwen3.5:9b"
+#
+#   Run 2 — Qwen 3.6 27B (GPU server):
+#       tag: "qwen36_27b"    model: "qwen3.6:27b"
+#
+#   Run 3 — Mistral 24B (GPU server):
+#       tag: "mistral_24b"   model: "mistral-small3.2:24b"
+#
+#   Run 4 — Qwen 3.6 35B (GPU server):
+#       tag: "qwen36_35b"    model: "qwen3.6:35b"
+#
+# Then evaluate each run:
+#   python evaluation/evaluate_all.py \
+#       --pairs output/stage2_<TAG>/qa_pairs.jsonl \
+#       --output-dir eval_results_<TAG>/
 # ============================================================
+
+# ----- experiment knobs (change per run) -----
+experiment:
+  tag: "qwen36_27b"             # <-- CHANGE PER EXPERIMENT (used in output paths)
 
 input:
   pdf_path: "hp-e877-series-user-guide.pdf"
-  test_pages: null
+  test_pages: null              # set to e.g. [1,2,3,4,5] for a smoke test
 
+# ============================================================
+# STAGE 1 — Document Extraction
+# ============================================================
 stage1:
-  output_dir: "output/stage1"
+  output_dir: "output/stage1"   # shared across all experiments — Stage 1 is deterministic
   text:
     min_block_chars: 5
     heading_font_threshold: 1.2
@@ -29,8 +63,11 @@ stage1:
     fallback_flavor: "stream"
     output_format: "json"
 
+# ============================================================
+# STAGE 2 — Q&A Dataset Generation
+# ============================================================
 stage2:
-  output_dir: "output/stage2"
+  output_dir: "output/stage2_qwen36_27b"   # <-- update to match experiment.tag
   input_md: null
 
   chunking:
@@ -73,9 +110,9 @@ stage2:
       - "important"
 
   llm:
-    model: "qwen3.5:9b"
+    model: "qwen3.6:27b"            # <-- CHANGE PER EXPERIMENT
     base_url: "http://localhost:11434"
-    temperature: 0.3              # was 0.7 — LLD §3.3 specifies 0.3 for grounded Q&A
+    temperature: 0.3                # LLD §3.3: 0.3 for grounded Q&A
     max_tokens: 4096
     timeout: 600
     system_roles:
@@ -86,7 +123,7 @@ stage2:
 
   filters:
     min_question_length: 10
-    min_answer_length: 5                              # was 20 — spec answers ("6 GB") are valid
+    min_answer_length: 5                                # spec answers ("6 GB") are valid
     max_answer_length: 2000
     weak_answer_patterns:
       - "I don't know"
@@ -97,14 +134,12 @@ stage2:
       - "not provided in the text"
       - "the text does not provide"
       - "detailed steps are not"
-      
-      # NOTE: removed "not available" — was rejecting legitimate answers like
+      # NOTE: do NOT add "not available" — rejects legitimate answers like
       # "if this check box is not available, the feature is unavailable"
-    hallucination_similarity_threshold: 0.55         # was implicit 0.55 — empirical tuning for HP corpus
-    hallucination_bypass_categories: ["spec"]         # spec chunks are tables; embeddings unreliable
+    hallucination_similarity_threshold: 0.55            # empirical tuning for HP corpus
+    hallucination_bypass_categories: ["spec"]           # spec chunks are tables; embeddings unreliable
     dedup_similarity_threshold: 0.92
     embedding_model: "all-MiniLM-L6-v2"
-    # enforce_language: "any"                         # off (supports both EN and KO per FR030)
 
   export:
     jsonl: true
@@ -113,93 +148,80 @@ stage2:
 
 # ============================================================
 # STAGE 3 — Dataset Augmentation
-# Paraphrases accepted Stage 2 questions to multiply dataset size.
-# Preserves the original answer unchanged on every variation.
 # ============================================================
 stage3:
-  output_dir: "output/stage3"
-
-  # Optional: override Stage 2 input file (defaults to stage2/qa_pairs.jsonl)
-  input_jsonl: null
+  output_dir: "output/stage3_qwen36_27b"   # <-- update to match experiment.tag
+  input_jsonl: null                         # auto-resolves from stage2.output_dir
 
   llm:
     base_url: "http://localhost:11434"
-    model: "qwen3.5:9b"              # same model as Stage 2
-    fallback_model: "qwen3.5:9b"     # retried once if primary model errors
-    temperature: 0.7                 # higher than Stage 2 — encourages variety
+    model: "qwen3.6:27b"            # <-- CHANGE PER EXPERIMENT (keep same family as stage2)
+    fallback_model: "qwen3.6:27b"   # retried once if primary errors
+    temperature: 0.7                # higher than Stage 2 — encourages variety
     max_tokens: 512
     timeout: 600
 
   augmentation:
-    variations_per_qa: 3             # ask LLM for 3, filter keeps ~2
+    variations_per_qa: 3            # ask LLM for 3, filter keeps ~2
 
   filter:
-    similarity_max: 0.97             # drop near-duplicates (no diversity gain)
-    similarity_min: 0.70             # drop semantic drift (meaning changed)
-    min_variation_length: 10         # char count
+    similarity_max: 0.97            # drop near-duplicates
+    similarity_min: 0.70            # drop semantic drift
+    min_variation_length: 10
     embedding_model: "all-MiniLM-L6-v2"
 
   export:
-    jsonl: true                      # augmented.jsonl  (originals + variations)
-    csv: true                        # augmented.csv    (same data, CSV)
-    mentor_batch: true               # mentor_batch.jsonl (FR021 — GPU handoff)
+    jsonl: true
+    csv: true
+    mentor_batch: true              # FR021 — GPU handoff format
 
 # ============================================================
 # STAGE 4 — RAG Chat Service
-# Builds a hybrid Chroma vector index (Stage 1 chunks + Stage 2/3 Q&A pairs)
-# and serves grounded answers over it via Streamlit.
+# Independent of stage 2/3 LLM choice — keep this stable across experiments.
 # ============================================================
 stage4:
-  output_dir: "output/stage4"
+  output_dir: "output/stage4_qwen36_27b"   # <-- update to match experiment.tag
 
-  # Data sources for the index. Null = auto-resolve from earlier stage output_dirs.
   sources:
-    markdown_glob: null              # default: stage1.output_dir/*.md
-    augmented_jsonl: null            # default: stage3.output_dir/augmented.jsonl (preferred)
-    qa_jsonl: null                   # default: stage2.output_dir/qa_pairs.jsonl  (fallback)
+    markdown_glob: null
+    augmented_jsonl: null           # auto-resolves from stage3.output_dir
+    qa_jsonl: null                  # fallback if augmented not found
 
-  # Retrieval-specific chunker (RE-CHUNKS Stage 1 markdown — separate from Stage 2 chunking)
   chunking:
-    max_tokens: 512                  # slightly larger than Stage 2 — retrieval needs more context
+    max_tokens: 512
     overlap_sentences: 1
     min_chunk_chars: 80
 
-  # Sentence-transformer for indexing AND query-time embedding
   embedding:
-    model: "all-MiniLM-L6-v2"        # 384-d, same family used in Stage 2 dedup
+    model: "all-MiniLM-L6-v2"
     batch_size: 32
     device: "cpu"
 
-  # Persistent ChromaDB store (SQLite + parquet under persist_dir)
   chroma:
-    persist_dir: "output/stage4/chroma"
+    persist_dir: "output/stage4_qwen36_27b/chroma"   # <-- update to match experiment.tag
     collection_name: "hp_e877_manual"
 
-  # Retrieval tuning
   retrieval:
-    top_k: 10                        # over-fetch, then score-filter
-    max_final_hits: 5                # cap what is shown to the LLM
-    min_score: 0.3                   # cosine similarity floor; empty list if none pass
-    qa_fast_path_score: 0.85         # promote a very-confident QA-pair hit to position 0
+    top_k: 10
+    max_final_hits: 5
+    min_score: 0.3
+    qa_fast_path_score: 0.85
 
-  # Answer generation — Qwen3.5:9B via Ollama (same stack as Stage 2/3)
   llm:
     base_url: "http://localhost:11434"
-    model: "qwen2.5:3b"
-    temperature: 0.2                 # LOW — grounded factual answers, not variety
+    model: "qwen2.5:3b"             # RAG answer model — keep stable to compare retrieval quality
+    temperature: 0.2
     max_tokens: 1024
     timeout: 600
-    max_context_chars: 6000          # cap injected context so we don't blow past Qwen's window
+    max_context_chars: 6000
 
-  # UI
   ui:
     host: "localhost"
     port: 8501
 
-  # FR028 — offline enforcement (blocks any non-loopback socket connection)
   offline:
     enforce: true
-    log_path: "output/stage4/offline_guard.log"
+    log_path: "output/stage4_qwen36_27b/offline_guard.log"   # <-- update to match experiment.tag
 
 ocr:
   enabled: false
