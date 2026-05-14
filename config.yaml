@@ -92,9 +92,15 @@ stage2:
       - "I don't know"
       - "refer to the manual"
       - "N/A"
+      - "not included in the provided text"
+      - "not included in the text"
+      - "not provided in the text"
+      - "the text does not provide"
+      - "detailed steps are not"
+      
       # NOTE: removed "not available" — was rejecting legitimate answers like
       # "if this check box is not available, the feature is unavailable"
-    hallucination_similarity_threshold: 0.40          # was implicit 0.55 — empirical tuning for HP corpus
+    hallucination_similarity_threshold: 0.55         # was implicit 0.55 — empirical tuning for HP corpus
     hallucination_bypass_categories: ["spec"]         # spec chunks are tables; embeddings unreliable
     dedup_similarity_threshold: 0.92
     embedding_model: "all-MiniLM-L6-v2"
