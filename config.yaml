@@ -1,0 +1,158 @@
+input:
+  pdf_path: data/source_pdfs/hp-e877-series-user-guide.pdf
+  test_pages: null
+experiment:
+  tag: qwen35_35b
+stage1:
+  output_dir: data/stage1_output
+  text:
+    min_block_chars: 5
+    heading_font_threshold: 1.2
+    bold_font_keywords:
+    - 'NOTE:'
+    - 'CAUTION:'
+    - 'WARNING:'
+    - 'IMPORTANT:'
+    - 'TIP:'
+  images:
+    output_subdir: images
+    min_width: 50
+    min_height: 50
+    image_format: png
+  tables:
+    output_subdir: tables
+    flavor: lattice
+    fallback_flavor: stream
+    output_format: json
+stage2:
+  output_dir: output/stage2_qwen35_35b
+  input_md: data/stage1_output/hp-e877-series-user-guide.md
+  chunking:
+    max_tokens: 400
+    overlap_sentences: 1
+    min_chunk_length: 50
+  classifier:
+    procedure_keywords:
+    - step
+    - follow these steps
+    - instructions
+    - how to
+    - install
+    - replace
+    - remove
+    - insert
+    - open the
+    - close the
+    - select
+    - press
+    spec_keywords:
+    - dimensions
+    - weight
+    - specification
+    - supported
+    - compatible
+    - capacity
+    - speed
+    - resolution
+    rule_error_keywords:
+    - caution
+    - warning
+    - note
+    - error
+    - troubleshoot
+    - problem
+    - jam
+    - do not
+    - important
+  llm:
+    model: qwen3.5:35b
+    base_url: http://localhost:11434
+    temperature: 0.3
+    max_tokens: 4096
+    timeout: 600
+    system_roles:
+    - You are a helpful HP printer technician.
+    - You are a printer hardware expert.
+    - You are an HP technical support specialist.
+    - You are a customer service agent for HP printers.
+  filters:
+    min_question_length: 10
+    min_answer_length: 5
+    max_answer_length: 2000
+    weak_answer_patterns:
+    - I don't know
+    - refer to the manual
+    - N/A
+    - not included in the provided text
+    - not included in the text
+    - not provided in the text
+    - the text does not provide
+    - detailed steps are not
+    hallucination_similarity_threshold: 0.4
+    hallucination_bypass_categories:
+    - spec
+    dedup_similarity_threshold: 0.92
+    embedding_model: all-MiniLM-L6-v2
+  export:
+    jsonl: true
+    csv: true
+    dli_kb: true
+stage3:
+  output_dir: output/stage3_mistral_24b__by_qwen3-5_35b
+  input_jsonl: output/stage2_mistral_24b/qa_pairs.jsonl
+  llm:
+    base_url: http://localhost:11434
+    model: qwen3.5:35b
+    fallback_model: qwen3.5:35b
+    temperature: 0.7
+    max_tokens: 512
+    timeout: 600
+  augmentation:
+    variations_per_qa: 3
+  filter:
+    similarity_max: 0.97
+    similarity_min: 0.7
+    min_variation_length: 5
+    embedding_model: all-MiniLM-L6-v2
+  export:
+    jsonl: true
+    csv: true
+    mentor_batch: true
+stage4:
+  output_dir: output/stage4_qwen35_35b
+  sources:
+    markdown_glob: null
+    augmented_jsonl: null
+    qa_jsonl: null
+  chunking:
+    max_tokens: 512
+    overlap_sentences: 1
+    min_chunk_chars: 80
+  embedding:
+    model: all-MiniLM-L6-v2
+    batch_size: 32
+    device: cpu
+  chroma:
+    persist_dir: output/stage4_qwen35_35b/chroma
+    collection_name: hp_e877_manual
+  retrieval:
+    top_k: 10
+    max_final_hits: 5
+    min_score: 0.3
+    qa_fast_path_score: 0.85
+  llm:
+    base_url: http://localhost:11434
+    model: qwen3.5:35b
+    temperature: 0.2
+    max_tokens: 1024
+    timeout: 600
+    max_context_chars: 6000
+  ui:
+    host: localhost
+    port: 8501
+  offline:
+    enforce: true
+    log_path: output/stage4_qwen35_35b/offline_guard.log
+ocr:
+  enabled: false
+  language: en
