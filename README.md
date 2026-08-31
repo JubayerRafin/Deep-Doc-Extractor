@@ -217,6 +217,14 @@ This produces faithfulness (NLI + token-overlap), question-quality, and diversit
 
 ---
 
+## Next: Deep Doc Extractor 2.0
+
+A follow-on project extends this extraction pipeline into **document transformation** —
+layout-preserving translation and PII de-identification. See
+[`docs/DDE2_PROPOSAL.md`](docs/DDE2_PROPOSAL.md).
+
+---
+
 ## Out of Scope (Future Work)
 
 - Model fine-tuning on the generated dataset
